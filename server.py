@@ -6,8 +6,21 @@ from fastapi.responses import FileResponse
 import datetime
 import random
 import openai
+from duckduckgo_search import DDGS
 
 app = FastAPI()
+
+def perform_web_search(query):
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=3))
+            if results:
+                # Format the top results into a string
+                search_data = "\n".join([f"- {r['title']}: {r['body']}" for r in results])
+                return f"I found some information from the web:\n\n{search_data}"
+    except Exception as e:
+        print(f"Search Error: {e}")
+    return None
 
 # Enable CORS for frontend interaction
 app.add_middleware(
@@ -55,7 +68,14 @@ async def chat_endpoint(request: ChatRequest):
         if f"open {site}" in query:
             return {"response": f"Opening {site} for you.", "type": "browser", "url": url}
 
-    # 2. Real ChatGPT Logic (if API key provided)
+    # 2. Check for real-time information requests (Web Search)
+    real_time_keywords = ["news", "latest", "weather", "price", "who is", "what is", "current", "today"]
+    if any(k in query for k in real_time_keywords) and not request.apikey:
+        search_result = perform_web_search(request.query)
+        if search_result:
+            return {"response": search_result, "type": "web_search"}
+
+    # 3. Real ChatGPT Logic (if API key provided)
     if request.apikey and len(request.apikey) > 20:
         try:
             openai.api_key = request.apikey
