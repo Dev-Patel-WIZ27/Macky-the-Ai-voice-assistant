@@ -208,7 +208,7 @@ function greetBoss() {
     else if (hour < 17) wish = "Good afternoon";
     else wish = "Good evening";
 
-    const greeting = `${wish} boss; what can I do for you today?`;
+    const greeting = `${wish} buddy; what can I do for you today?`;
     addMessage(greeting, 'bot');
     say(greeting);
 }
