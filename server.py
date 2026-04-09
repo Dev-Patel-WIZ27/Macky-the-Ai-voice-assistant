@@ -5,22 +5,61 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import datetime
 import random
+from urllib.parse import urlparse
 import openai
 from duckduckgo_search import DDGS
 
 app = FastAPI()
 
+def get_clean_site_name(url):
+    try:
+        domain = urlparse(url).netloc
+        if domain.startswith("www."):
+            domain = domain[4:]
+        # Capitalize the first letter of the domain name part
+        return domain.split('.')[0].capitalize()
+    except:
+        return "the web"
+
 def perform_web_search(query):
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=3))
+            # We search for the top 2 results to be efficient
+            results = list(ddgs.text(query, max_results=2))
             if results:
-                # Format the top results into a string
-                search_data = "\n".join([f"- {r['title']}: {r['body']}" for r in results])
-                return f"I found some information from the web:\n\n{search_data}"
+                res = results[0]
+                site = get_clean_site_name(res['href'])
+                return {
+                    "site": site,
+                    "body": res['body'],
+                    "title": res['title']
+                }
     except Exception as e:
         print(f"Search Error: {e}")
     return None
+
+def wrap_with_friendly_personality(data, query):
+    if not data:
+        return "Hey buddy, I tried looking that up for you but couldn't find anything solid. Want to try asking in a different way?"
+    
+    # Friendly, helpful intro phrases
+    intro_phrases = [
+        f"I've got some info on that for you! According to **{data['site']}**, ",
+        f"I did a quick search buddy. I see on **{data['site']}** that ",
+        f"Check this out! **{data['site']}** is reporting that ",
+        f"Found it! My research on **{data['site']}** shows that "
+    ]
+    
+    # Closing phrases to feel like a friend
+    closing_phrases = [
+        ". Hope that helps you out!",
+        ". Pretty interesting, right?",
+        ". I'm here if you need anything else!",
+        ". Let me know if you want me to dig deeper!"
+    ]
+    
+    response = random.choice(intro_phrases) + data['body'] + random.choice(closing_phrases)
+    return response
 
 # Enable CORS for frontend interaction
 app.add_middleware(
@@ -35,14 +74,11 @@ class ChatRequest(BaseModel):
     apikey: str = ""
     local_time: str = ""
 
-# Mock responses for Simulation Mode
+# Mock responses for absolute fallback
 MOCK_RESPONSES = [
     "I'm Macky, your Arctic assistant. How can I help you today?",
     "That's an interesting question! In simulation mode, I can tell you that the future looks bright.",
-    "I'm processing your request... Wait, I'm just a simulation for now! But I'm still learning.",
-    "Arctic temperatures are stable. My circuits are running efficiently.",
     "System check complete. All protocols are green.",
-    "I can open websites like YouTube or Google if you ask me to!",
     "I'm currently running in high-efficiency Mock Mode."
 ]
 
@@ -55,7 +91,6 @@ async def chat_endpoint(request: ChatRequest):
         return {"response": "Goodbye boss", "type": "shutdown"}
 
     if "time" in query:
-        # Use local_time from browser if available, otherwise server time
         t = request.local_time if request.local_time else datetime.datetime.now().strftime("%I:%M %p")
         return {"response": f"The current time is {t}.", "type": "system"}
     
@@ -70,17 +105,18 @@ async def chat_endpoint(request: ChatRequest):
         if f"open {site}" in query:
             return {"response": f"Opening {site} for you.", "type": "browser", "url": url}
 
-    # 2. Check for real-time information requests (Web Search)
+    # 2. Check for real-time information requests (Web Search as Primary Intelligence)
     real_time_keywords = [
         "news", "latest", "weather", "price", "who is", "what is", "current", 
         "today", "stock", "share", "crypto", "bitcoin", "market", "how is", "where is"
     ]
     
-    # If it matches keywords OR if no API key is provided, we use the WEB as Macky's brain
+    # If it matches keywords OR if no API key is provided, we use the WEB
     if any(k in query for k in real_time_keywords) or not request.apikey:
-        search_result = perform_web_search(request.query)
-        if search_result:
-            return {"response": search_result, "type": "web_search"}
+        search_data = perform_web_search(request.query)
+        if search_data:
+            friendly_response = wrap_with_friendly_personality(search_data, request.query)
+            return {"response": friendly_response, "type": "web_search"}
 
     # 3. Real ChatGPT Logic (if API key provided)
     if request.apikey and len(request.apikey) > 20:
@@ -95,7 +131,7 @@ async def chat_endpoint(request: ChatRequest):
         except Exception as e:
             return {"response": f"AI Error: {str(e)}. Reverting to simulation.", "type": "error"}
 
-    # 4. Simulation Logic (Final Fallback)
+    # 4. Final Fallback (Random Macky phrase)
     response = random.choice(MOCK_RESPONSES)
     return {"response": response, "type": "simulation"}
 
