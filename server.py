@@ -33,6 +33,7 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     query: str
     apikey: str = ""
+    local_time: str = ""
 
 # Mock responses for Simulation Mode
 MOCK_RESPONSES = [
@@ -54,8 +55,9 @@ async def chat_endpoint(request: ChatRequest):
         return {"response": "Goodbye boss", "type": "shutdown"}
 
     if "time" in query:
-        current_time = datetime.datetime.now().strftime("%I:%M %p")
-        return {"response": f"The current time is {current_time}.", "type": "system"}
+        # Use local_time from browser if available, otherwise server time
+        t = request.local_time if request.local_time else datetime.datetime.now().strftime("%I:%M %p")
+        return {"response": f"The current time is {t}.", "type": "system"}
     
     sites = {
         "youtube": "https://youtube.com",
@@ -69,8 +71,13 @@ async def chat_endpoint(request: ChatRequest):
             return {"response": f"Opening {site} for you.", "type": "browser", "url": url}
 
     # 2. Check for real-time information requests (Web Search)
-    real_time_keywords = ["news", "latest", "weather", "price", "who is", "what is", "current", "today"]
-    if any(k in query for k in real_time_keywords) and not request.apikey:
+    real_time_keywords = [
+        "news", "latest", "weather", "price", "who is", "what is", "current", 
+        "today", "stock", "share", "crypto", "bitcoin", "market", "how is", "where is"
+    ]
+    
+    # If it matches keywords OR if no API key is provided, we use the WEB as Macky's brain
+    if any(k in query for k in real_time_keywords) or not request.apikey:
         search_result = perform_web_search(request.query)
         if search_result:
             return {"response": search_result, "type": "web_search"}
@@ -88,7 +95,7 @@ async def chat_endpoint(request: ChatRequest):
         except Exception as e:
             return {"response": f"AI Error: {str(e)}. Reverting to simulation.", "type": "error"}
 
-    # 3. Simulation Logic (Default)
+    # 4. Simulation Logic (Final Fallback)
     response = random.choice(MOCK_RESPONSES)
     return {"response": response, "type": "simulation"}
 

@@ -128,7 +128,8 @@ async function processQuery(query) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 query: query,
-                apikey: config.apiKey
+                apikey: config.apiKey,
+                local_time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
             })
         });
 
