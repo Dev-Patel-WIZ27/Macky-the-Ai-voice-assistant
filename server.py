@@ -11,47 +11,50 @@ from duckduckgo_search import DDGS
 
 app = FastAPI()
 
+def optimize_query(query):
+    query = query.lower()
+    # Optimize for Indian stocks if Reliance or other major companies mentioned
+    if "reliance" in query and "stock" in query:
+        return "reliance industries share price live nse moneycontrol"
+    if "stock" in query or "price" in query or "share" in query:
+        if "india" in query or "nse" in query or "bse" in query:
+            return f"{query} live price nse"
+        return f"{query} real-time stock price"
+    return query
+
 def get_clean_site_name(url):
     try:
         domain = urlparse(url).netloc
         if domain.startswith("www."):
             domain = domain[4:]
+        # Get the first part of the domain and capitalize it
         return domain.split('.')[0].capitalize()
     except:
         return "the web"
 
-def optimize_query(query):
-    query = query.lower().strip()
-    # Market & Stock Optimization
-    if "stock" in query or "share" in query or "reliance" in query:
-        if "reliance" in query and "price" not in query:
-            return "Reliance Industries share price live NSE"
-        return f"{query} price today live"
-    # Weather Optimization
-    if "weather" in query and "today" not in query:
-        return f"{query} today forecast"
-    return query
-
 def perform_web_search(query):
+    # Optimize the search query for better accuracy
+    search_query = optimize_query(query)
     try:
-        search_term = optimize_query(query)
         with DDGS() as ddgs:
-            # We look at more results to filter for the best information
-            results = list(ddgs.text(search_term, max_results=5))
+            # Retrieve up to 5 results for better factual density
+            results = list(ddgs.text(search_query, max_results=5))
             if results:
-                # Filter for results that look like they contain data (have numbers or symbols)
-                # or are simply substantial snippets
-                good_results = [r for r in results if len(r['body']) > 50]
-                if not good_results:
-                    good_results = results  # Fallback to any result
+                # We prioritize results that look like they have price data
+                best_results = []
+                for res in results:
+                    # Look for currency symbols or "₹" specifically for high-relevance info
+                    if any(c in res['body'] for c in ["₹", "$", "Rs", "price", "trading"]):
+                        best_results.append(res)
                 
-                # Take the top 1 for a precise answer, but we could combine if needed
-                res = good_results[0]
-                site = get_clean_site_name(res['href'])
+                # If we found high-quality price data, use that
+                final_res = best_results[0] if best_results else results[0]
+                
+                site = get_clean_site_name(final_res['href'])
                 return {
                     "site": site,
-                    "body": res['body'],
-                    "title": res['title']
+                    "body": final_res['body'],
+                    "title": final_res['title']
                 }
     except Exception as e:
         print(f"Search Error: {e}")
@@ -59,21 +62,22 @@ def perform_web_search(query):
 
 def wrap_with_friendly_personality(data, query):
     if not data:
-        return "Hey buddy, I tried looking that up for you but couldn't find anything solid. Want to try asking in a different way?"
+        return "Hey buddy, I tried digging into the web for you but couldn't find anything solid. Want to try asking in a different way?"
     
-    # Friendly, helpful intro phrases (Removed 'boss', using 'buddy')
+    # Friendly, helpful intro phrases
     intro_phrases = [
         f"I've got some info on that for you! According to **{data['site']}**, ",
         f"I did a quick search buddy. I see on **{data['site']}** that ",
         f"Check this out! **{data['site']}** is reporting that ",
-        f"I found some details on **{data['site']}** buddy: "
+        f"Found it! My research on **{data['site']}** shows that "
     ]
     
+    # Closing phrases to feel like a friend
     closing_phrases = [
         ". Hope that helps you out!",
         ". Pretty interesting, right?",
-        ". Let me know if you want me to dig deeper!",
-        ". Let me know if that's what you were looking for!"
+        ". I'm here if you need anything else!",
+        ". Let me know if you want me to dig deeper, buddy!"
     ]
     
     response = random.choice(intro_phrases) + data['body'] + random.choice(closing_phrases)
@@ -95,9 +99,9 @@ class ChatRequest(BaseModel):
 # Mock responses for absolute fallback
 MOCK_RESPONSES = [
     "I'm Macky, your Arctic assistant. How can I help you today, buddy?",
-    "That's an interesting question! I can find anything for you on the web.",
+    "That's an interesting question! I'm here to help, buddy.",
     "System check complete. All protocols are green, buddy.",
-    "I'm here for you! Just let me know what you need."
+    "I'm currently running in high-efficiency Friendly Mode, buddy."
 ]
 
 @app.post("/chat")
@@ -106,7 +110,7 @@ async def chat_endpoint(request: ChatRequest):
     
     # 1. Check for specific commands (System tasks)
     if "close macky" in query:
-        return {"response": "Goodbye buddy, see you soon!", "type": "shutdown"}
+        return {"response": "Goodbye buddy", "type": "shutdown"}
 
     if "time" in query:
         t = request.local_time if request.local_time else datetime.datetime.now().strftime("%I:%M %p")
@@ -147,7 +151,7 @@ async def chat_endpoint(request: ChatRequest):
             )
             return {"response": response.choices[0].text.strip(), "type": "ai"}
         except Exception as e:
-            return {"response": f"AI Error: {str(e)}. Reverting buddy.", "type": "error"}
+            return {"response": f"AI Error: {str(e)}. Reverting to simulation.", "type": "error"}
 
     # 4. Final Fallback (Random Macky phrase)
     response = random.choice(MOCK_RESPONSES)
@@ -155,7 +159,7 @@ async def chat_endpoint(request: ChatRequest):
 
 @app.get("/status")
 async def status():
-    return {"status": "online", "mode": "Smart Simulation"}
+    return {"status": "online", "mode": "Friendly Intelligence"}
 
 # Serve Frontend from 'public' folder
 app.mount("/", StaticFiles(directory="public", html=True), name="static")
