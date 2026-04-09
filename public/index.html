@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Macky AI – Virtual Assistant</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="wake-up-overlay" class="wake-up-overlay">
+        <div class="wake-up-content">
+            <div class="wake-up-orb"></div>
+            <h2>Click Anywhere to Wake Up Macky</h2>
+            <p>I need your touch to start my sensors.</p>
+        </div>
+    </div>
+    <div class="aura-bg"></div>
+    
+    <header>
+        <div class="logo">MACKY<span>.v2</span></div>
+        <div class="status-badge" id="backend-status">
+            <span class="dot"></span> Backend Offline
+        </div>
+    </header>
+
+    <main>
+        <div class="ai-container">
+            <!-- Futureristic pulsing orb -->
+            <div class="orb-outer">
+                <div class="orb-inner" id="macky-orb">
+                    <div class="orb-core"></div>
+                    <div class="pulse pulse-1"></div>
+                    <div class="pulse pulse-2"></div>
+                </div>
+            </div>
+            
+            <h1 class="ai-status" id="ai-status-text">Awaiting Command</h1>
+            <p class="ai-hint" id="ai-hint">"Macky, what is the time?"</p>
+        </div>
+
+        <section class="chat-terminal" id="chat-terminal">
+            <div class="chat-log" id="chat-id">
+                <div class="msg bot">Hello, I am Macky. Ready to assist.</div>
+            </div>
+            
+            <div class="input-area">
+                <button class="mic-btn" id="mic-btn" title="Hold to Speak">
+                    <svg viewBox="0 0 24 24" class="mic-icon"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                </button>
+                <input type="text" id="manual-input" placeholder="Type your instruction..." autocomplete="off">
+                <button class="send-btn" id="send-btn">
+                    <svg viewBox="0 0 24 24" class="send-icon"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <div class="settings-trigger" onclick="toggleSettings()">⚙️</div>
+    <div class="settings-panel" id="settings-panel">
+        <h3>Portal Configuration</h3>
+        <p>API Keys are stored locally in your browser.</p>
+        <div class="field">
+            <label>OpenAI Secret Key</label>
+            <input type="password" id="api-key-input" placeholder="sk-...">
+        </div>
+        <button class="save-btn" onclick="saveSettings()">Apply Changes</button>
+    </div>
+
+    <!-- Web Speech API integration -->
+    <script src="app.js"></script>
+</body>
+</html>
