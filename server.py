@@ -12,14 +12,15 @@ from duckduckgo_search import DDGS
 app = FastAPI()
 
 def optimize_query(query):
-    query = query.lower()
-    # Optimize for Indian stocks if Reliance or other major companies mentioned
-    if "reliance" in query and "stock" in query:
+    query = query.lower().strip()
+    # Handle specific stock market keywords for Reliance/India
+    if "reliance" in query and ("stock" in query or "price" in query or "share" in query):
         return "reliance industries share price live nse moneycontrol"
-    if "stock" in query or "price" in query or "share" in query:
+    if any(k in query for k in ["stock", "price", "share", "market"]):
+        # Add 'live' and 'nse' for Indian context if not present for better accuracy
         if "india" in query or "nse" in query or "bse" in query:
-            return f"{query} live price nse"
-        return f"{query} real-time stock price"
+             return f"{query} live price"
+        return f"{query} share price live nse"
     return query
 
 def get_clean_site_name(url):
@@ -27,34 +28,32 @@ def get_clean_site_name(url):
         domain = urlparse(url).netloc
         if domain.startswith("www."):
             domain = domain[4:]
-        # Get the first part of the domain and capitalize it
         return domain.split('.')[0].capitalize()
     except:
         return "the web"
 
 def perform_web_search(query):
-    # Optimize the search query for better accuracy
-    search_query = optimize_query(query)
+    optimized = optimize_query(query)
     try:
         with DDGS() as ddgs:
-            # Retrieve up to 5 results for better factual density
-            results = list(ddgs.text(search_query, max_results=5))
+            # Get up to 5 results to find the most accurate one
+            results = list(ddgs.text(optimized, max_results=5))
             if results:
-                # We prioritize results that look like they have price data
-                best_results = []
+                # Prioritize snippets with currency symbols or high keyword density
+                high_quality = []
                 for res in results:
-                    # Look for currency symbols or "₹" specifically for high-relevance info
-                    if any(c in res['body'] for c in ["₹", "$", "Rs", "price", "trading"]):
-                        best_results.append(res)
+                    body = res['body'].lower()
+                    if any(c in res['body'] for c in ["₹", "Rs", "INR", "$", "price", "traded"]):
+                        high_quality.append(res)
                 
-                # If we found high-quality price data, use that
-                final_res = best_results[0] if best_results else results[0]
+                # Pick the best result found
+                target = high_quality[0] if high_quality else results[0]
+                site = get_clean_site_name(target['href'])
                 
-                site = get_clean_site_name(final_res['href'])
                 return {
                     "site": site,
-                    "body": final_res['body'],
-                    "title": final_res['title']
+                    "body": target['body'],
+                    "title": target['title']
                 }
     except Exception as e:
         print(f"Search Error: {e}")
@@ -62,28 +61,25 @@ def perform_web_search(query):
 
 def wrap_with_friendly_personality(data, query):
     if not data:
-        return "Hey buddy, I tried digging into the web for you but couldn't find anything solid. Want to try asking in a different way?"
+        return "Hey buddy, I tried digging into the web for you but couldn't find anything solid right now. Want to try asking in a different way?"
     
-    # Friendly, helpful intro phrases
-    intro_phrases = [
-        f"I've got some info on that for you! According to **{data['site']}**, ",
-        f"I did a quick search buddy. I see on **{data['site']}** that ",
-        f"Check this out! **{data['site']}** is reporting that ",
+    intros = [
+        f"I've got some info on that for you, buddy! According to **{data['site']}**, ",
+        f"I did a quick research for you. I see on **{data['site']}** that ",
+        f"Check this out, buddy! **{data['site']}** is reporting that ",
         f"Found it! My research on **{data['site']}** shows that "
     ]
     
-    # Closing phrases to feel like a friend
-    closing_phrases = [
+    closings = [
         ". Hope that helps you out!",
-        ". Pretty interesting, right?",
+        ". Pretty interesting, right buddy?",
         ". I'm here if you need anything else!",
-        ". Let me know if you want me to dig deeper, buddy!"
+        ". Let me know if you want me to dig deeper for you!"
     ]
     
-    response = random.choice(intro_phrases) + data['body'] + random.choice(closing_phrases)
-    return response
+    return random.choice(intros) + data['body'] + random.choice(closings)
 
-# Enable CORS for frontend interaction
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -96,10 +92,9 @@ class ChatRequest(BaseModel):
     apikey: str = ""
     local_time: str = ""
 
-# Mock responses for absolute fallback
 MOCK_RESPONSES = [
     "I'm Macky, your Arctic assistant. How can I help you today, buddy?",
-    "That's an interesting question! I'm here to help, buddy.",
+    "That's an interesting question! I'm here to help you out, buddy.",
     "System check complete. All protocols are green, buddy.",
     "I'm currently running in high-efficiency Friendly Mode, buddy."
 ]
@@ -108,7 +103,6 @@ MOCK_RESPONSES = [
 async def chat_endpoint(request: ChatRequest):
     query = request.query.lower()
     
-    # 1. Check for specific commands (System tasks)
     if "close macky" in query:
         return {"response": "Goodbye buddy", "type": "shutdown"}
 
@@ -117,30 +111,21 @@ async def chat_endpoint(request: ChatRequest):
         return {"response": f"The current time is {t}, buddy.", "type": "system"}
     
     sites = {
-        "youtube": "https://youtube.com",
-        "google": "https://google.com",
-        "wikipedia": "https://wikipedia.com",
-        "github": "https://github.com"
+        "youtube": "https://youtube.com", "google": "https://google.com",
+        "wikipedia": "https://wikipedia.com", "github": "https://github.com"
     }
     
     for site, url in sites.items():
         if f"open {site}" in query:
             return {"response": f"Opening {site} for you, buddy.", "type": "browser", "url": url}
 
-    # 2. Check for real-time information requests (Web Search as Primary Intelligence)
-    real_time_keywords = [
-        "news", "latest", "weather", "price", "who is", "what is", "current", 
-        "today", "stock", "share", "crypto", "bitcoin", "market", "how is", "where is", "report"
-    ]
-    
-    # If it matches keywords OR if no API key is provided, we use the WEB
-    if any(k in query for k in real_time_keywords) or not request.apikey:
-        search_data = perform_web_search(request.query)
-        if search_data:
-            friendly_response = wrap_with_friendly_personality(search_data, request.query)
-            return {"response": friendly_response, "type": "web_search"}
+    # Research and Information Fallback
+    search_data = perform_web_search(request.query)
+    if search_data:
+        friendly_response = wrap_with_friendly_personality(search_data, request.query)
+        return {"response": friendly_response, "type": "web_search"}
 
-    # 3. Real ChatGPT Logic (if API key provided)
+    # Handle AI logic if no search results found
     if request.apikey and len(request.apikey) > 20:
         try:
             openai.api_key = request.apikey
@@ -151,17 +136,14 @@ async def chat_endpoint(request: ChatRequest):
             )
             return {"response": response.choices[0].text.strip(), "type": "ai"}
         except Exception as e:
-            return {"response": f"AI Error: {str(e)}. Reverting to simulation.", "type": "error"}
+            return {"response": f"AI Error: {str(e)}. Reverting to buddy mode.", "type": "error"}
 
-    # 4. Final Fallback (Random Macky phrase)
-    response = random.choice(MOCK_RESPONSES)
-    return {"response": response, "type": "simulation"}
+    return {"response": random.choice(MOCK_RESPONSES), "type": "simulation"}
 
 @app.get("/status")
 async def status():
-    return {"status": "online", "mode": "Friendly Intelligence"}
+    return {"status": "online", "mode": "Ultra Friendly Intelligence"}
 
-# Serve Frontend from 'public' folder
 app.mount("/", StaticFiles(directory="public", html=True), name="static")
 
 if __name__ == "__main__":
